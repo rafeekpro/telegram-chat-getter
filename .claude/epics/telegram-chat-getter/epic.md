@@ -1,16 +1,16 @@
 ---
 name: telegram-chat-getter
-status: backlog
+status: in-progress
 created: 2025-12-29T12:51:49.660Z
-updated: 2025-12-29T12:52:49Z
+updated: 2025-12-29T13:02:14Z
 progress: 0%
 prd: .claude/prds/telegram-chat-getter.md
-github: [Will be updated when synced to GitHub]
+github: https://github.com/rafeekpro/telegram-chat-getter/issues/2
 priority: P2
 required_agents:
   - path: .claude/agents/languages/python-backend-engineer.md
     role: All Python implementation
-    tasks: [001, 002, 003, 004, 005, 006, 007]
+    tasks: [3, 4, 5, 6, 7, 8, 9]
 ---
 
 # Epic: telegram-chat-getter
@@ -26,33 +26,33 @@ A Python CLI tool that connects to a personal Telegram account and downloads cha
 - **Dependencies**: telethon, aiofiles, python-dotenv, rich
 
 ## Tasks Created
-- [ ] 001.md - Project Setup and Configuration (parallel: false)
-- [ ] 002.md - Authentication Module (parallel: false, depends: 001)
-- [ ] 003.md - List Chats Command (parallel: true, depends: 002)
-- [ ] 004.md - Message Downloader (parallel: true, depends: 002)
-- [ ] 005.md - Media Downloader (parallel: false, depends: 004)
-- [ ] 006.md - Markdown Exporter (parallel: false, depends: 004, 005)
-- [ ] 007.md - CLI Integration and Testing (parallel: false, depends: 003, 004, 005, 006)
+- [ ] #3 - Project Setup and Configuration (parallel: false)
+- [ ] #4 - Authentication Module (parallel: false, depends: #3)
+- [ ] #5 - List Chats Command (parallel: true, depends: #4)
+- [ ] #6 - Message Downloader (parallel: true, depends: #4)
+- [ ] #7 - Media Downloader (parallel: false, depends: #6)
+- [ ] #8 - Markdown Exporter (parallel: false, depends: #6, #7)
+- [ ] #9 - CLI Integration and Testing (parallel: false, depends: #5, #6, #7, #8)
 
 **Total tasks**: 7
-**Parallel tasks**: 2 (003, 004 can run together)
+**Parallel tasks**: 2 (#5, #6 can run together)
 **Sequential tasks**: 5
 **Estimated total effort**: 23 hours (~3 days)
 
 ## Implementation Strategy
 
-### Phase 1: Foundation (Task 001)
+### Phase 1: Foundation (#3)
 - Project setup with pyproject.toml
 - Package structure
 - Environment configuration
 
-### Phase 2: Core Implementation (Tasks 002-005)
+### Phase 2: Core Implementation (#4-#7)
 - Authentication with Telegram
 - List chats command
 - Message downloading with pagination
 - Media downloading (images, audio, video, documents)
 
-### Phase 3: Integration (Tasks 006-007)
+### Phase 3: Integration (#8-#9)
 - Markdown export
 - CLI wiring with argparse
 - Progress bars with rich
@@ -66,7 +66,7 @@ A Python CLI tool that connects to a personal Telegram account and downloads cha
 - telethon library
 
 ### Internal Dependencies
-- Task flow: 001 → 002 → (003 || 004) → 005 → 006 → 007
+- Task flow: #3 → #4 → (#5 || #6) → #7 → #8 → #9
 
 ## Success Criteria
 
