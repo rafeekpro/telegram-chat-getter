@@ -213,6 +213,38 @@ class TestMessageDataclass:
             )
             assert msg.media_type == media_type
 
+    def test_message_has_optional_transcription_field(self) -> None:
+        """
+        GIVEN Message dataclass
+        WHEN creating an instance with transcription
+        THEN transcription field is stored correctly
+        """
+        msg = Message(
+            id=1,
+            date=datetime.now(UTC),
+            sender_id=1001,
+            sender_name="Test",
+            text="",
+            media_type="audio",
+            transcription="This is the transcribed voice message",
+        )
+        assert msg.transcription == "This is the transcribed voice message"
+
+    def test_message_transcription_defaults_to_none(self) -> None:
+        """
+        GIVEN Message dataclass
+        WHEN creating an instance without transcription
+        THEN transcription defaults to None
+        """
+        msg = Message(
+            id=1,
+            date=datetime.now(UTC),
+            sender_id=1001,
+            sender_name="Test",
+            text="Hello",
+        )
+        assert msg.transcription is None
+
 
 class TestParseMessage:
     """Test parse_message function that converts Telegram messages to Message dataclass."""
@@ -947,6 +979,139 @@ class TestProgressTracking:
 
         # Check that total was passed
         assert any(call[1] == 100 for call in progress_calls)
+
+
+class TestReverseAndMinId:
+    """Test reverse and min_id parameters for chronological download."""
+
+    @pytest.mark.asyncio
+    async def test_download_messages_with_reverse_true_passes_reverse_to_client(self) -> None:
+        """
+        GIVEN reverse=True parameter
+        WHEN calling download_messages
+        THEN reverse=True is passed to iter_messages
+        """
+        mock_client = MagicMock()
+
+        captured_reverse = None
+
+        async def mock_iter_messages(_chat, **kwargs):
+            nonlocal captured_reverse
+            captured_reverse = kwargs.get("reverse")
+            return
+            yield  # Make it an async generator
+
+        mock_client.iter_messages = mock_iter_messages
+
+        downloader = MessageDownloader(client=mock_client)
+        async for _ in downloader.download_messages(chat="test", reverse=True):
+            pass
+
+        assert captured_reverse is True
+
+    @pytest.mark.asyncio
+    async def test_download_messages_with_reverse_false_does_not_pass_reverse(self) -> None:
+        """
+        GIVEN reverse=False parameter (default)
+        WHEN calling download_messages
+        THEN reverse is not passed to iter_messages (default behavior)
+        """
+        mock_client = MagicMock()
+
+        captured_kwargs = {}
+
+        async def mock_iter_messages(_chat, **kwargs):
+            nonlocal captured_kwargs
+            captured_kwargs = kwargs
+            return
+            yield
+
+        mock_client.iter_messages = mock_iter_messages
+
+        downloader = MessageDownloader(client=mock_client)
+        async for _ in downloader.download_messages(chat="test", reverse=False):
+            pass
+
+        # reverse should not be passed when False (default behavior)
+        assert captured_kwargs.get("reverse") is None or captured_kwargs.get("reverse") is False
+
+    @pytest.mark.asyncio
+    async def test_download_messages_with_min_id_passes_min_id_to_client(self) -> None:
+        """
+        GIVEN min_id=0 parameter
+        WHEN calling download_messages
+        THEN min_id=0 is passed to iter_messages
+        """
+        mock_client = MagicMock()
+
+        captured_min_id = None
+
+        async def mock_iter_messages(_chat, **kwargs):
+            nonlocal captured_min_id
+            captured_min_id = kwargs.get("min_id")
+            return
+            yield
+
+        mock_client.iter_messages = mock_iter_messages
+
+        downloader = MessageDownloader(client=mock_client)
+        async for _ in downloader.download_messages(chat="test", min_id=0):
+            pass
+
+        assert captured_min_id == 0
+
+    @pytest.mark.asyncio
+    async def test_download_messages_default_min_id_is_none(self) -> None:
+        """
+        GIVEN no min_id parameter
+        WHEN calling download_messages
+        THEN min_id is not passed to iter_messages
+        """
+        mock_client = MagicMock()
+
+        captured_kwargs = {}
+
+        async def mock_iter_messages(_chat, **kwargs):
+            nonlocal captured_kwargs
+            captured_kwargs = kwargs
+            return
+            yield
+
+        mock_client.iter_messages = mock_iter_messages
+
+        downloader = MessageDownloader(client=mock_client)
+        async for _ in downloader.download_messages(chat="test"):
+            pass
+
+        assert "min_id" not in captured_kwargs or captured_kwargs.get("min_id") is None
+
+    @pytest.mark.asyncio
+    async def test_download_messages_reverse_and_min_id_together(self) -> None:
+        """
+        GIVEN reverse=True and min_id=0 parameters
+        WHEN calling download_messages
+        THEN both are passed to iter_messages for chronological download
+        """
+        mock_client = MagicMock()
+
+        captured_reverse = None
+        captured_min_id = None
+
+        async def mock_iter_messages(_chat, **kwargs):
+            nonlocal captured_reverse, captured_min_id
+            captured_reverse = kwargs.get("reverse")
+            captured_min_id = kwargs.get("min_id")
+            return
+            yield
+
+        mock_client.iter_messages = mock_iter_messages
+
+        downloader = MessageDownloader(client=mock_client)
+        async for _ in downloader.download_messages(chat="test", reverse=True, min_id=0):
+            pass
+
+        assert captured_reverse is True
+        assert captured_min_id == 0
 
 
 class TestMessageStorage:

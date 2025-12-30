@@ -184,6 +184,26 @@ class TestDownloadCommand:
         assert result.exit_code == 0
         assert "--no-media" in result.output
 
+    def test_download_command_has_all_flag(self) -> None:
+        """
+        GIVEN CLI app
+        WHEN running download --help
+        THEN shows --download-all flag for downloading all messages chronologically
+        """
+        result = runner.invoke(app, ["download", "--help"])
+        assert result.exit_code == 0
+        assert "--download-all" in result.output
+
+    def test_download_command_has_transcribe_flag(self) -> None:
+        """
+        GIVEN CLI app
+        WHEN running download --help
+        THEN shows --transcribe/-t flag for voice message transcription
+        """
+        result = runner.invoke(app, ["download", "--help"])
+        assert result.exit_code == 0
+        assert "--transcribe" in result.output
+
 
 class TestDownloadCommandExecution:
     """Test download command execution with mocked Telegram client."""

@@ -74,3 +74,6 @@ venv.bak/
 
 # Local configuration
 .env.local
+
+# User output data
+output/

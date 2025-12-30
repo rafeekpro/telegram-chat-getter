@@ -27,12 +27,12 @@ _ERR_MISSING_CREDENTIALS = (
     "You can get these from https://my.telegram.org/apps"
 )
 _ERR_NETWORK_FAILED = (
-    "Network connection failed: {error}. " "Please check your internet connection and try again."
+    "Network connection failed: {error}. Please check your internet connection and try again."
 )
 _ERR_INVALID_CREDENTIALS = (
-    "Invalid credentials: {error}. " "Please verify your API_ID and API_HASH are correct."
+    "Invalid credentials: {error}. Please verify your API_ID and API_HASH are correct."
 )
-_ERR_AUTH_FAILED = "Authentication failed: {error}. " "Please try again or check your credentials."
+_ERR_AUTH_FAILED = "Authentication failed: {error}. Please try again or check your credentials."
 _ERR_NOT_CONNECTED = "Not connected to Telegram. Call connect() first."
 
 

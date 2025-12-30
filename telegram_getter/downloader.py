@@ -62,6 +62,7 @@ class Message:
         reply_to: ID of the message this is replying to (None if not a reply)
         media_type: Type of media attachment (photo, audio, video, document, or None)
         media_path: Local path to downloaded media file (filled after download)
+        transcription: Transcription text for voice messages (requires Telegram Premium)
     """
 
     id: int
@@ -72,6 +73,7 @@ class Message:
     reply_to: int | None = None
     media_type: str | None = None
     media_path: str | None = None
+    transcription: str | None = None
 
 
 def parse_message(telegram_msg: TelegramMessage) -> Message:
@@ -176,6 +178,8 @@ class MessageDownloader:
         progress_callback: ProgressCallback | None = None,
         store: bool = False,
         fetch_total: bool = False,
+        reverse: bool = False,
+        min_id: int | None = None,
     ) -> AsyncIterator[Message]:
         """
         Iterate through all messages in a chat.
@@ -191,6 +195,8 @@ class MessageDownloader:
             progress_callback: Callback called with (current_count, total)
             store: If True, store messages in self.messages
             fetch_total: If True, fetch total message count before iterating
+            reverse: If True, iterate from oldest to newest (chronological order)
+            min_id: Minimum message ID to start from (use 0 for first message)
 
         Yields:
             Message objects from the chat
@@ -209,10 +215,23 @@ class MessageDownloader:
         count = 0
         batch_count = 0
 
+        # Build iter_messages kwargs
+        iter_kwargs: dict[str, Any] = {
+            "offset_date": to_date,
+            "limit": limit,
+        }
+
+        # Add reverse if True
+        if reverse:
+            iter_kwargs["reverse"] = True
+
+        # Add min_id if specified
+        if min_id is not None:
+            iter_kwargs["min_id"] = min_id
+
         async for telegram_msg in self.client.iter_messages(
             chat,
-            offset_date=to_date,
-            limit=limit,
+            **iter_kwargs,
         ):
             # Filter by from_date if specified
             if from_date is not None and telegram_msg.date < from_date:

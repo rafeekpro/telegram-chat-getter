@@ -5,6 +5,8 @@ Provides functionality to:
 - Format individual messages as markdown
 - Export messages to markdown files with date grouping
 - Generate metadata JSON files with statistics
+- Load existing messages for incremental sync
+- Convert message dicts back to Message dataclass
 """
 
 from __future__ import annotations
@@ -21,6 +23,61 @@ from telegram_getter.downloader import ChatMessage, Message
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+
+async def load_existing_messages(output_dir: Path) -> tuple[list[dict[str, Any]], int]:
+    """
+    Load existing messages from messages.json.
+
+    Reads the messages.json file from the output directory and returns
+    both the list of message dictionaries and the highest message ID.
+    This is used for incremental sync to download only new messages.
+
+    Args:
+        output_dir: Directory containing messages.json
+
+    Returns:
+        Tuple of (list of message dicts, highest message ID).
+        Returns ([], 0) if file doesn't exist or is empty.
+    """
+    json_path = output_dir / "messages.json"
+    if not json_path.exists():
+        return [], 0
+
+    async with aiofiles.open(json_path, encoding="utf-8") as f:
+        content = await f.read()
+        data = json.loads(content)
+        messages = data.get("messages", [])
+        if not messages:
+            return [], 0
+        highest_id = max(m["id"] for m in messages)
+        return messages, highest_id
+
+
+def dict_to_message(d: dict[str, Any]) -> Message:
+    """
+    Convert a dictionary back to Message dataclass.
+
+    Used for loading existing messages from JSON and converting them
+    back to Message objects for merging with newly downloaded messages.
+
+    Args:
+        d: Dictionary with message fields (as stored in messages.json)
+
+    Returns:
+        Message dataclass with all fields populated from the dict
+    """
+    return Message(
+        id=d["id"],
+        date=datetime.fromisoformat(d["date"]),
+        sender_id=d["sender_id"],
+        sender_name=d["sender_name"],
+        text=d["text"],
+        reply_to=d.get("reply_to"),
+        media_type=d.get("media_type"),
+        media_path=d.get("media_path"),
+        transcription=d.get("transcription"),
+    )
 
 
 def format_message(msg: Message) -> str:
@@ -59,6 +116,10 @@ def format_message(msg: Message) -> str:
         media_line = _format_media_link(msg.media_type, msg.media_path)
         if media_line:
             lines.append(media_line)
+
+    # Transcription (for voice messages)
+    if msg.transcription:
+        lines.append(f"> Transcription: {msg.transcription}")
 
     return "\n".join(lines)
 
@@ -129,8 +190,8 @@ async def export_to_markdown(
         date_key = msg.date.strftime("%Y-%m-%d")
         messages_by_date[date_key].append(msg)
 
-    # Sort dates (newest first) and messages within each date (oldest first)
-    sorted_dates = sorted(messages_by_date.keys(), reverse=True)
+    # Sort dates (oldest first for chronological order) and messages within each date (oldest first)
+    sorted_dates = sorted(messages_by_date.keys())
 
     for i, date_key in enumerate(sorted_dates):
         # Date header
@@ -230,6 +291,57 @@ async def generate_metadata(
 
     async with aiofiles.open(output_path, "w", encoding="utf-8") as f:
         await f.write(json.dumps(metadata, indent=2, ensure_ascii=False))
+
+    return output_path
+
+
+async def export_messages_to_json(
+    messages: Sequence[Message],
+    output_dir: Path,
+) -> Path:
+    """
+    Export all messages to a JSON file in chronological order.
+
+    Creates a messages.json file containing:
+    - Export timestamp
+    - Message count
+    - All messages sorted oldest first with all fields
+
+    Args:
+        messages: List of Message objects to export
+        output_dir: Directory where the file will be created
+
+    Returns:
+        Path to the created JSON file
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / "messages.json"
+
+    # Sort messages by date (oldest first for chronological order)
+    sorted_messages = sorted(messages, key=lambda m: m.date)
+
+    def message_to_dict(msg: Message) -> dict[str, Any]:
+        """Convert Message to dictionary for JSON serialization."""
+        return {
+            "id": msg.id,
+            "date": msg.date.isoformat(),
+            "sender_id": msg.sender_id,
+            "sender_name": msg.sender_name,
+            "text": msg.text,
+            "reply_to": msg.reply_to,
+            "media_type": msg.media_type,
+            "media_path": msg.media_path,
+            "transcription": msg.transcription,
+        }
+
+    data = {
+        "exported_at": datetime.now(UTC).isoformat(),
+        "message_count": len(messages),
+        "messages": [message_to_dict(msg) for msg in sorted_messages],
+    }
+
+    async with aiofiles.open(output_path, "w", encoding="utf-8") as f:
+        await f.write(json.dumps(data, indent=2, ensure_ascii=False))
 
     return output_path
 

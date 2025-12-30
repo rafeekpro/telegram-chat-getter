@@ -18,6 +18,7 @@ import pytest
 
 from telegram_getter.downloader import Message
 from telegram_getter.exporter import (
+    export_messages_to_json,
     export_to_markdown,
     format_message,
     generate_metadata,
@@ -227,8 +228,99 @@ class TestFormatMessageWithMedia:
         assert "![image](media/images/2025-01-15_001.jpg)" in result
 
 
+class TestFormatMessageWithTranscription:
+    """Test format_message function with transcription field."""
+
+    def test_format_message_with_transcription(self) -> None:
+        """
+        GIVEN a voice message with transcription
+        WHEN calling format_message
+        THEN output includes transcription text
+        """
+        msg = Message(
+            id=1,
+            date=datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC),
+            sender_id=1001,
+            sender_name="John Doe",
+            text="",
+            media_type="audio",
+            media_path="media/audio/voice.ogg",
+            transcription="This is the transcribed voice message",
+        )
+
+        result = format_message(msg)
+
+        assert "This is the transcribed voice message" in result
+
+    def test_format_message_transcription_appears_after_media_link(self) -> None:
+        """
+        GIVEN a voice message with transcription
+        WHEN calling format_message
+        THEN transcription appears after the voice message link
+        """
+        msg = Message(
+            id=1,
+            date=datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC),
+            sender_id=1001,
+            sender_name="John Doe",
+            text="",
+            media_type="audio",
+            media_path="media/audio/voice.ogg",
+            transcription="Hello from voice",
+        )
+
+        result = format_message(msg)
+
+        media_pos = result.find("[Voice message]")
+        transcription_pos = result.find("Hello from voice")
+
+        assert media_pos < transcription_pos
+
+    def test_format_message_transcription_format(self) -> None:
+        """
+        GIVEN a voice message with transcription
+        WHEN calling format_message
+        THEN transcription is formatted with speaker icon indicator
+        """
+        msg = Message(
+            id=1,
+            date=datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC),
+            sender_id=1001,
+            sender_name="John Doe",
+            text="",
+            media_type="audio",
+            media_path="media/audio/voice.ogg",
+            transcription="Test transcription",
+        )
+
+        result = format_message(msg)
+
+        # Should include a transcription indicator
+        assert "Transcription:" in result
+
+    def test_format_message_without_transcription(self) -> None:
+        """
+        GIVEN a voice message without transcription
+        WHEN calling format_message
+        THEN output does not include transcription section
+        """
+        msg = Message(
+            id=1,
+            date=datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC),
+            sender_id=1001,
+            sender_name="John Doe",
+            text="",
+            media_type="audio",
+            media_path="media/audio/voice.ogg",
+            transcription=None,
+        )
+
+        result = format_message(msg)
+
+        assert "Transcription:" not in result
+
+
 class TestFormatMessageWithReply:
-    """Test format_message function with reply_to field."""
 
     def test_format_message_with_reply_to(self) -> None:
         """
@@ -450,11 +542,11 @@ class TestExportToMarkdown:
         assert "## 2025-01-14" in content
 
     @pytest.mark.asyncio
-    async def test_export_to_markdown_sorts_dates_newest_first(self, tmp_path: Path) -> None:
+    async def test_export_to_markdown_sorts_dates_oldest_first(self, tmp_path: Path) -> None:
         """
         GIVEN messages from different dates
         WHEN calling export_to_markdown
-        THEN dates are sorted newest first
+        THEN dates are sorted oldest first (chronological order)
         """
         messages = [
             Message(
@@ -476,10 +568,11 @@ class TestExportToMarkdown:
         result = await export_to_markdown(messages, "Test Chat", tmp_path)
 
         content = result.read_text()
-        pos_jan_15 = content.find("## 2025-01-15")
         pos_jan_14 = content.find("## 2025-01-14")
+        pos_jan_15 = content.find("## 2025-01-15")
 
-        assert pos_jan_15 < pos_jan_14
+        # Oldest date should appear first (chronological order)
+        assert pos_jan_14 < pos_jan_15
 
     @pytest.mark.asyncio
     async def test_export_to_markdown_sorts_messages_by_time_within_date(
@@ -868,3 +961,283 @@ class TestGenerateMetadata:
         # Should not raise
         data = json.loads(result.read_text())
         assert isinstance(data, dict)
+
+
+class TestExportMessagesToJson:
+    """Test export_messages_to_json function for creating messages.json."""
+
+    @pytest.mark.asyncio
+    async def test_export_messages_to_json_creates_file(self, tmp_path: Path) -> None:
+        """
+        GIVEN a list of messages
+        WHEN calling export_messages_to_json
+        THEN creates messages.json file in output directory
+        """
+        messages = [
+            Message(
+                id=1,
+                date=datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC),
+                sender_id=1001,
+                sender_name="John Doe",
+                text="Hello",
+            )
+        ]
+
+        result = await export_messages_to_json(messages, tmp_path)
+
+        assert result.exists()
+        assert result.name == "messages.json"
+
+    @pytest.mark.asyncio
+    async def test_export_messages_to_json_chronological_order(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        GIVEN messages in non-chronological order
+        WHEN calling export_messages_to_json
+        THEN messages are sorted oldest first (chronological order)
+        """
+        messages = [
+            Message(
+                id=2,
+                date=datetime(2025, 1, 15, 16, 0, 0, tzinfo=UTC),
+                sender_id=1002,
+                sender_name="Jane",
+                text="Later",
+            ),
+            Message(
+                id=1,
+                date=datetime(2025, 1, 14, 10, 0, 0, tzinfo=UTC),
+                sender_id=1001,
+                sender_name="John",
+                text="Earlier",
+            ),
+        ]
+
+        result = await export_messages_to_json(messages, tmp_path)
+
+        data = json.loads(result.read_text())
+        assert data["messages"][0]["id"] == 1  # Earlier message first
+        assert data["messages"][1]["id"] == 2  # Later message second
+
+    @pytest.mark.asyncio
+    async def test_export_messages_to_json_includes_all_fields(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        GIVEN a message with all fields populated
+        WHEN calling export_messages_to_json
+        THEN all fields are included in the JSON output
+        """
+        messages = [
+            Message(
+                id=123,
+                date=datetime(2025, 1, 15, 14, 30, 45, tzinfo=UTC),
+                sender_id=1001,
+                sender_name="John Doe",
+                text="Hello world",
+                reply_to=100,
+                media_type="photo",
+                media_path="media/images/photo.jpg",
+            )
+        ]
+
+        result = await export_messages_to_json(messages, tmp_path)
+
+        data = json.loads(result.read_text())
+        msg = data["messages"][0]
+
+        assert msg["id"] == 123
+        assert msg["date"] == "2025-01-15T14:30:45+00:00"
+        assert msg["sender_id"] == 1001
+        assert msg["sender_name"] == "John Doe"
+        assert msg["text"] == "Hello world"
+        assert msg["reply_to"] == 100
+        assert msg["media_type"] == "photo"
+        assert msg["media_path"] == "media/images/photo.jpg"
+
+    @pytest.mark.asyncio
+    async def test_export_messages_to_json_includes_message_count(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        GIVEN multiple messages
+        WHEN calling export_messages_to_json
+        THEN JSON includes message_count field
+        """
+        messages = [
+            Message(
+                id=1,
+                date=datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC),
+                sender_id=1001,
+                sender_name="John",
+                text="First",
+            ),
+            Message(
+                id=2,
+                date=datetime(2025, 1, 15, 14, 31, 0, tzinfo=UTC),
+                sender_id=1002,
+                sender_name="Jane",
+                text="Second",
+            ),
+        ]
+
+        result = await export_messages_to_json(messages, tmp_path)
+
+        data = json.loads(result.read_text())
+        assert data["message_count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_export_messages_to_json_includes_export_timestamp(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        GIVEN messages to export
+        WHEN calling export_messages_to_json
+        THEN JSON includes exported_at timestamp
+        """
+        messages = [
+            Message(
+                id=1,
+                date=datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC),
+                sender_id=1001,
+                sender_name="John",
+                text="Hello",
+            )
+        ]
+
+        result = await export_messages_to_json(messages, tmp_path)
+
+        data = json.loads(result.read_text())
+        assert "exported_at" in data
+        # Should be ISO format
+        assert "T" in data["exported_at"]
+
+    @pytest.mark.asyncio
+    async def test_export_messages_to_json_handles_empty_list(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        GIVEN an empty message list
+        WHEN calling export_messages_to_json
+        THEN creates valid JSON with empty messages array
+        """
+        messages: list[Message] = []
+
+        result = await export_messages_to_json(messages, tmp_path)
+
+        data = json.loads(result.read_text())
+        assert data["message_count"] == 0
+        assert data["messages"] == []
+
+    @pytest.mark.asyncio
+    async def test_export_messages_to_json_handles_none_optional_fields(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        GIVEN a message with None optional fields
+        WHEN calling export_messages_to_json
+        THEN optional fields are null in JSON
+        """
+        messages = [
+            Message(
+                id=1,
+                date=datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC),
+                sender_id=1001,
+                sender_name="John",
+                text="Hello",
+                reply_to=None,
+                media_type=None,
+                media_path=None,
+            )
+        ]
+
+        result = await export_messages_to_json(messages, tmp_path)
+
+        data = json.loads(result.read_text())
+        msg = data["messages"][0]
+
+        assert msg["reply_to"] is None
+        assert msg["media_type"] is None
+        assert msg["media_path"] is None
+
+    @pytest.mark.asyncio
+    async def test_export_messages_to_json_is_valid_json(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        GIVEN messages
+        WHEN calling export_messages_to_json
+        THEN output file is valid JSON
+        """
+        messages = [
+            Message(
+                id=1,
+                date=datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC),
+                sender_id=1001,
+                sender_name="John Doe",
+                text="Hello",
+            )
+        ]
+
+        result = await export_messages_to_json(messages, tmp_path)
+
+        # Should not raise
+        data = json.loads(result.read_text())
+        assert isinstance(data, dict)
+
+    @pytest.mark.asyncio
+    async def test_export_messages_to_json_includes_transcription(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        GIVEN a message with transcription
+        WHEN calling export_messages_to_json
+        THEN JSON includes transcription field
+        """
+        messages = [
+            Message(
+                id=1,
+                date=datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC),
+                sender_id=1001,
+                sender_name="John Doe",
+                text="",
+                media_type="audio",
+                media_path="media/audio/voice.ogg",
+                transcription="This is the voice transcription",
+            )
+        ]
+
+        result = await export_messages_to_json(messages, tmp_path)
+
+        data = json.loads(result.read_text())
+        msg = data["messages"][0]
+
+        assert msg["transcription"] == "This is the voice transcription"
+
+    @pytest.mark.asyncio
+    async def test_export_messages_to_json_transcription_null_when_missing(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        GIVEN a message without transcription
+        WHEN calling export_messages_to_json
+        THEN transcription field is null in JSON
+        """
+        messages = [
+            Message(
+                id=1,
+                date=datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC),
+                sender_id=1001,
+                sender_name="John Doe",
+                text="Hello",
+                transcription=None,
+            )
+        ]
+
+        result = await export_messages_to_json(messages, tmp_path)
+
+        data = json.loads(result.read_text())
+        msg = data["messages"][0]
+
+        assert msg["transcription"] is None
