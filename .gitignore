@@ -77,3 +77,9 @@ venv.bak/
 
 # User output data
 output/
+
+# Claude Code files
+.claude/
+.claude-code/
+CLAUDE.md
+CLAUDE.local.md
